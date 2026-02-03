@@ -13,6 +13,7 @@ Commands use the 'e' prefix:
 Reference: https://www.zevendevelopment.com/relayexpander.html
 """
 
+import asyncio
 from enum import Enum
 
 from hoardicult.devices.ioexpander import IOExpander
@@ -138,6 +139,36 @@ class RelayController:
             state = RelayState.UNKNOWN
         self._states[(board_addr, relay_num)] = state
         return state
+
+    async def run_demo(
+        self,
+        board_addr: int,
+        relay_count: int,
+        delay_ms: int = 100,
+    ) -> None:
+        """Run running-light demo pattern across relays.
+
+        Creates a "wave" effect by turning on each relay sequentially while
+        turning off the previous one.
+
+        Args:
+            board_addr: IOExpander board address (1-255)
+            relay_count: Number of relays to cycle through
+            delay_ms: Delay between steps in milliseconds
+        """
+        delay_sec = delay_ms / 1000.0
+        prev_relay: int | None = None
+
+        for relay_num in range(1, relay_count + 1):
+            await self.relay_on(board_addr, relay_num)
+            await asyncio.sleep(delay_sec)
+            if prev_relay:
+                await self.relay_off(board_addr, prev_relay)
+            prev_relay = relay_num
+
+        # Turn off final relay
+        if prev_relay:
+            await self.relay_off(board_addr, prev_relay)
 
     def _validate_relay_num(self, relay_num: int) -> None:
         """Validate relay number is in valid range."""

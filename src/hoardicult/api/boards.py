@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from hoardicult.devices.ioexpander import IOExpanderError
 from hoardicult.devices.relay_expander import RelayController, RelayState
@@ -240,3 +240,107 @@ async def close_all_system(controller: RelayControllerDep) -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Errors during shutdown: {'; '.join(errors)}",
         )
+
+
+@router.post("/{board_addr}/demo")
+async def demo_board(
+    board_addr: BoardAddrPath,
+    controller: RelayControllerDep,
+    delay_ms: int = Query(default=100, ge=10, le=2000),
+    cycles: int = Query(default=1, ge=1, le=10),
+) -> dict:
+    """Run running-light demo on a single board.
+
+    Creates a wave effect across the relay LEDs by turning on each relay
+    sequentially while turning off the previous one.
+
+    Args:
+        board_addr: Board address to run demo on
+        delay_ms: Delay between steps in milliseconds (10-2000)
+        cycles: Number of times to repeat the pattern (1-10)
+
+    Returns:
+        Status message with demo parameters
+    """
+    config = get_board_config(board_addr)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Board {board_addr} not found",
+        )
+
+    relay_count = config.get("relay_count", 16)
+
+    try:
+        for _ in range(cycles):
+            await controller.run_demo(board_addr, relay_count, delay_ms)
+    except IOExpanderError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Communication error: {e}",
+        )
+
+    return {
+        "status": "completed",
+        "board_addr": board_addr,
+        "relay_count": relay_count,
+        "delay_ms": delay_ms,
+        "cycles": cycles,
+    }
+
+
+@router.post("/demo")
+async def demo_all_boards(
+    controller: RelayControllerDep,
+    delay_ms: int = Query(default=100, ge=10, le=2000),
+    cycles: int = Query(default=1, ge=1, le=10),
+) -> dict:
+    """Run running-light demo on all boards sequentially.
+
+    Runs the running-light pattern on each configured board one after another.
+
+    Args:
+        delay_ms: Delay between steps in milliseconds (10-2000)
+        cycles: Number of times to repeat the pattern per board (1-10)
+
+    Returns:
+        Status message with demo results for each board
+    """
+    results = []
+    errors = []
+
+    for config in _board_configs:
+        board_addr = config["board_addr"]
+        relay_count = config.get("relay_count", 16)
+        try:
+            for _ in range(cycles):
+                await controller.run_demo(board_addr, relay_count, delay_ms)
+            results.append({
+                "board_addr": board_addr,
+                "status": "completed",
+                "relay_count": relay_count,
+            })
+        except IOExpanderError as e:
+            errors.append(f"Board {board_addr}: {e}")
+            results.append({
+                "board_addr": board_addr,
+                "status": "error",
+                "error": str(e),
+            })
+
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": "Some boards had errors during demo",
+                "errors": errors,
+                "results": results,
+            },
+        )
+
+    return {
+        "status": "completed",
+        "delay_ms": delay_ms,
+        "cycles": cycles,
+        "boards": results,
+    }
