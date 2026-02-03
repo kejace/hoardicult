@@ -252,7 +252,8 @@ async def demo_board(
     """Run running-light demo on a single board.
 
     Creates a wave effect across the relay LEDs by turning on each relay
-    sequentially while turning off the previous one.
+    sequentially while turning off the previous one. If IOExpander is not
+    connected, runs in simulation mode (updates state without hardware).
 
     Args:
         board_addr: Board address to run demo on
@@ -260,7 +261,7 @@ async def demo_board(
         cycles: Number of times to repeat the pattern (1-10)
 
     Returns:
-        Status message with demo parameters
+        Status message with demo parameters and simulation status
     """
     config = get_board_config(board_addr)
     if config is None:
@@ -270,15 +271,21 @@ async def demo_board(
         )
 
     relay_count = config.get("relay_count", 16)
+    simulated = not controller.is_connected
 
-    try:
+    if simulated:
+        # Run in simulation mode
         for _ in range(cycles):
-            await controller.run_demo(board_addr, relay_count, delay_ms)
-    except IOExpanderError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Communication error: {e}",
-        )
+            await controller.run_demo_simulated(board_addr, relay_count, delay_ms)
+    else:
+        try:
+            for _ in range(cycles):
+                await controller.run_demo(board_addr, relay_count, delay_ms)
+        except IOExpanderError as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Communication error: {e}",
+            )
 
     return {
         "status": "completed",
@@ -286,6 +293,7 @@ async def demo_board(
         "relay_count": relay_count,
         "delay_ms": delay_ms,
         "cycles": cycles,
+        "simulated": simulated,
     }
 
 
@@ -298,35 +306,47 @@ async def demo_all_boards(
     """Run running-light demo on all boards sequentially.
 
     Runs the running-light pattern on each configured board one after another.
+    If IOExpander is not connected, runs in simulation mode.
 
     Args:
         delay_ms: Delay between steps in milliseconds (10-2000)
         cycles: Number of times to repeat the pattern per board (1-10)
 
     Returns:
-        Status message with demo results for each board
+        Status message with demo results for each board and simulation status
     """
     results = []
     errors = []
+    simulated = not controller.is_connected
 
     for config in _board_configs:
         board_addr = config["board_addr"]
         relay_count = config.get("relay_count", 16)
-        try:
+
+        if simulated:
             for _ in range(cycles):
-                await controller.run_demo(board_addr, relay_count, delay_ms)
+                await controller.run_demo_simulated(board_addr, relay_count, delay_ms)
             results.append({
                 "board_addr": board_addr,
                 "status": "completed",
                 "relay_count": relay_count,
             })
-        except IOExpanderError as e:
-            errors.append(f"Board {board_addr}: {e}")
-            results.append({
-                "board_addr": board_addr,
-                "status": "error",
-                "error": str(e),
-            })
+        else:
+            try:
+                for _ in range(cycles):
+                    await controller.run_demo(board_addr, relay_count, delay_ms)
+                results.append({
+                    "board_addr": board_addr,
+                    "status": "completed",
+                    "relay_count": relay_count,
+                })
+            except IOExpanderError as e:
+                errors.append(f"Board {board_addr}: {e}")
+                results.append({
+                    "board_addr": board_addr,
+                    "status": "error",
+                    "error": str(e),
+                })
 
     if errors:
         raise HTTPException(
@@ -342,5 +362,6 @@ async def demo_all_boards(
         "status": "completed",
         "delay_ms": delay_ms,
         "cycles": cycles,
+        "simulated": simulated,
         "boards": results,
     }

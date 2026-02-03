@@ -39,6 +39,17 @@ class RelayController:
         self._io = ioexpander
         # Track relay states: (board_addr, relay_num) -> state
         self._states: dict[tuple[int, int], RelayState] = {}
+        # Track which relays are simulated (not sent to hardware)
+        self._simulated: set[tuple[int, int]] = set()
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if IOExpander is connected."""
+        return self._io.is_connected
+
+    def is_simulated(self, board_addr: int, relay_num: int) -> bool:
+        """Check if relay state is simulated (not sent to hardware)."""
+        return (board_addr, relay_num) in self._simulated
 
     async def relay_on(self, board_addr: int, relay_num: int) -> None:
         """Turn on a relay (activate solenoid valve).
@@ -52,6 +63,7 @@ class RelayController:
             board_addr, f"e{relay_num}o", expect_response=False
         )
         self._states[(board_addr, relay_num)] = RelayState.ON
+        self._simulated.discard((board_addr, relay_num))
 
     async def relay_off(self, board_addr: int, relay_num: int) -> None:
         """Turn off a relay (deactivate solenoid valve).
@@ -65,6 +77,29 @@ class RelayController:
             board_addr, f"e{relay_num}f", expect_response=False
         )
         self._states[(board_addr, relay_num)] = RelayState.OFF
+        self._simulated.discard((board_addr, relay_num))
+
+    def relay_on_simulated(self, board_addr: int, relay_num: int) -> None:
+        """Simulate turning on a relay (state only, no hardware command).
+
+        Args:
+            board_addr: IOExpander board address (1-255)
+            relay_num: Relay number (1-256)
+        """
+        self._validate_relay_num(relay_num)
+        self._states[(board_addr, relay_num)] = RelayState.ON
+        self._simulated.add((board_addr, relay_num))
+
+    def relay_off_simulated(self, board_addr: int, relay_num: int) -> None:
+        """Simulate turning off a relay (state only, no hardware command).
+
+        Args:
+            board_addr: IOExpander board address (1-255)
+            relay_num: Relay number (1-256)
+        """
+        self._validate_relay_num(relay_num)
+        self._states[(board_addr, relay_num)] = RelayState.OFF
+        self._simulated.add((board_addr, relay_num))
 
     def get_relay_state(self, board_addr: int, relay_num: int) -> RelayState:
         """Get cached state of a relay.
@@ -96,10 +131,25 @@ class RelayController:
             board_addr, f"es{hex_string}", expect_response=False
         )
 
-        # Update cached states
+        # Update cached states and clear simulated flags
         for key in list(self._states.keys()):
             if key[0] == board_addr:
                 self._states[key] = RelayState.OFF
+                self._simulated.discard(key)
+
+    def close_all_on_board_simulated(
+        self, board_addr: int, relay_count: int = 256
+    ) -> None:
+        """Simulate closing all relays on a board (state only, no hardware).
+
+        Args:
+            board_addr: IOExpander board address (1-255)
+            relay_count: Number of relays to close (default: all 256)
+        """
+        for relay_num in range(1, relay_count + 1):
+            key = (board_addr, relay_num)
+            self._states[key] = RelayState.OFF
+            self._simulated.add(key)
 
     async def set_relay_expander_count(self, board_addr: int, count: int) -> None:
         """Configure the number of RelayExpander boards connected.
@@ -169,6 +219,36 @@ class RelayController:
         # Turn off final relay
         if prev_relay:
             await self.relay_off(board_addr, prev_relay)
+
+    async def run_demo_simulated(
+        self,
+        board_addr: int,
+        relay_count: int,
+        delay_ms: int = 100,
+    ) -> None:
+        """Run simulated running-light demo (state only, no hardware).
+
+        Creates a "wave" effect by updating relay states sequentially
+        without sending commands to hardware.
+
+        Args:
+            board_addr: IOExpander board address (1-255)
+            relay_count: Number of relays to cycle through
+            delay_ms: Delay between steps in milliseconds
+        """
+        delay_sec = delay_ms / 1000.0
+        prev_relay: int | None = None
+
+        for relay_num in range(1, relay_count + 1):
+            self.relay_on_simulated(board_addr, relay_num)
+            await asyncio.sleep(delay_sec)
+            if prev_relay:
+                self.relay_off_simulated(board_addr, prev_relay)
+            prev_relay = relay_num
+
+        # Turn off final relay
+        if prev_relay:
+            self.relay_off_simulated(board_addr, prev_relay)
 
     def _validate_relay_num(self, relay_num: int) -> None:
         """Validate relay number is in valid range."""

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoardicult Dashboard</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Hoardicult</h1>
+        <div class="header-controls">
+            <div class="connection-status" id="connection-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
+            <button class="demo-btn" id="demo-btn">Run Demo</button>
+            <button class="emergency-stop" id="emergency-stop">EMERGENCY STOP</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="controls">
+            <div class="control-group">
+                <div class="poll-control">
+                    <label for="poll-interval">Poll:</label>
+                    <select id="poll-interval">
+                        <option value="100">100ms</option>
+                        <option value="250" selected>250ms</option>
+                        <option value="500">500ms</option>
+                        <option value="1000">1s</option>
+                    </select>
+                </div>
+                <div class="demo-control">
+                    <label for="demo-delay">Demo delay:</label>
+                    <select id="demo-delay">
+                        <option value="50">50ms</option>
+                        <option value="100" selected>100ms</option>
+                        <option value="200">200ms</option>
+                        <option value="500">500ms</option>
+                    </select>
+                </div>
+            </div>
+            <div class="summary" id="summary">
+                <span class="summary-item">Boards: <strong id="total-boards">0</strong></span>
+                <span class="summary-item">On: <strong id="relays-on" class="on">0</strong></span>
+                <span class="summary-item">Off: <strong id="relays-off" class="off">0</strong></span>
+                <span class="summary-item">Unknown: <strong id="relays-unknown" class="unknown">0</strong></span>
+            </div>
+        </section>
+
+        <section class="boards" id="boards-container">
+            <!-- Boards will be populated dynamically -->
+        </section>
+    </main>
+
+    <footer>
+        <p>Last update: <span id="last-update">Never</span></p>
+    </footer>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

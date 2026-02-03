@@ -1,0 +1,327 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-dark: #1a1a2e;
+    --bg-card: #16213e;
+    --bg-relay: #0f3460;
+    --text-primary: #eaeaea;
+    --text-secondary: #a0a0a0;
+    --accent-green: #00ff88;
+    --accent-red: #ff4757;
+    --accent-yellow: #ffc107;
+    --border-color: #2a2a4a;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+header {
+    background-color: var(--bg-card);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.connection-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--accent-yellow);
+    transition: background-color 0.3s;
+}
+
+.status-dot.connected {
+    background-color: var(--accent-green);
+}
+
+.status-dot.disconnected {
+    background-color: var(--accent-red);
+}
+
+.demo-btn {
+    background-color: #6c5ce7;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s, background-color 0.2s;
+}
+
+.demo-btn:hover {
+    background-color: #5f4dd0;
+    transform: scale(1.02);
+    box-shadow: 0 0 15px rgba(108, 92, 231, 0.5);
+}
+
+.demo-btn:active {
+    transform: scale(0.98);
+}
+
+.demo-btn:disabled {
+    background-color: #4a4a6a;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.demo-btn.running {
+    background-color: #a29bfe;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.emergency-stop {
+    background-color: var(--accent-red);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.emergency-stop:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(255, 71, 87, 0.5);
+}
+
+.emergency-stop:active {
+    transform: scale(0.98);
+}
+
+main {
+    padding: 1.5rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.poll-control,
+.demo-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.poll-control label,
+.demo-control label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.poll-control select,
+.demo-control select {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.summary {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.summary-item {
+    color: var(--text-secondary);
+}
+
+.summary-item strong {
+    color: var(--text-primary);
+}
+
+.summary-item strong.on {
+    color: var(--accent-green);
+}
+
+.summary-item strong.off {
+    color: var(--text-secondary);
+}
+
+.summary-item strong.unknown {
+    color: var(--accent-yellow);
+}
+
+.boards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.board {
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    padding: 1.25rem;
+    border: 1px solid var(--border-color);
+}
+
+.board-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.board-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.board-title .board-name {
+    color: var(--text-secondary);
+    font-weight: 400;
+    margin-left: 0.5rem;
+}
+
+.board-stats {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.relay-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+    gap: 8px;
+}
+
+.relay {
+    aspect-ratio: 1;
+    background-color: var(--bg-relay);
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.relay:hover {
+    border-color: var(--text-secondary);
+    transform: scale(1.05);
+}
+
+.relay.on {
+    background-color: var(--accent-green);
+    color: #1a1a2e;
+    border-color: var(--accent-green);
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+}
+
+.relay.on.simulated {
+    background-color: #a29bfe;
+    border-color: #6c5ce7;
+    box-shadow: 0 0 15px rgba(108, 92, 231, 0.5);
+}
+
+.relay.off {
+    background-color: var(--bg-relay);
+    color: var(--text-secondary);
+}
+
+.relay.off.simulated {
+    border-color: #6c5ce7;
+    border-style: dashed;
+}
+
+.relay.unknown {
+    background-color: var(--bg-relay);
+    color: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+    border-style: dashed;
+}
+
+.relay.pending {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+footer {
+    padding: 1rem 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 600px) {
+    header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .summary {
+        justify-content: center;
+    }
+
+    .relay-grid {
+        grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    }
+}
