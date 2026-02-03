@@ -1,0 +1,16 @@
+{
+  "boards": [
+    {
+      "board_addr": 1,
+      "name": "Front Garden",
+      "relay_expander_count": 2,
+      "relay_count": 32
+    },
+    {
+      "board_addr": 2,
+      "name": "Back Garden",
+      "relay_expander_count": 3,
+      "relay_count": 48
+    }
+  ]
+}
