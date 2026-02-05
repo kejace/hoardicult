@@ -81,34 +81,46 @@ class IOExpander:
         """Set MARK parity (9th bit = 1) for address mode.
 
         Only works on Linux with CMSPAR support.
+        Uses same approach as reference ioexpander9bit.py.
         """
         if not self._serial:
             raise IOExpanderConnectionError("Not connected")
         if sys.platform != "linux":
             return  # Skip on non-Linux (for testing)
 
-        fd = self._serial.fileno()
-        attrs = termios.tcgetattr(fd)
-        # cflag is attrs[2]
-        attrs[2] |= termios.PARENB | CMSPAR | termios.PARODD
-        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        # Match reference implementation: unpack all termios attrs
+        iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(
+            self._serial
+        )
+        cflag |= termios.PARENB | CMSPAR | termios.PARODD
+        termios.tcsetattr(
+            self._serial,
+            termios.TCSANOW,
+            [iflag, oflag, cflag, lflag, ispeed, ospeed, cc],
+        )
 
     def _set_space_parity(self) -> None:
         """Set SPACE parity (9th bit = 0) for data mode.
 
         Only works on Linux with CMSPAR support.
+        Uses same approach as reference ioexpander9bit.py.
         """
         if not self._serial:
             raise IOExpanderConnectionError("Not connected")
         if sys.platform != "linux":
             return  # Skip on non-Linux (for testing)
 
-        fd = self._serial.fileno()
-        attrs = termios.tcgetattr(fd)
-        # cflag is attrs[2]
-        attrs[2] |= termios.PARENB | CMSPAR
-        attrs[2] &= ~termios.PARODD
-        termios.tcsetattr(fd, termios.TCSANOW, attrs)
+        # Match reference implementation: unpack all termios attrs
+        iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(
+            self._serial
+        )
+        cflag |= termios.PARENB | CMSPAR
+        cflag &= ~termios.PARODD
+        termios.tcsetattr(
+            self._serial,
+            termios.TCSANOW,
+            [iflag, oflag, cflag, lflag, ispeed, ospeed, cc],
+        )
 
     def _address_board(self, board_address: int) -> None:
         """Send board address with MARK parity (9th bit = 1).
