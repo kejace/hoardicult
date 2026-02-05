@@ -16,7 +16,7 @@ class TestIOExpanderInit:
     def test_default_settings(self) -> None:
         """IOExpander uses default settings from config."""
         io = IOExpander()
-        assert io.port == "/dev/ttyUSB0"
+        assert io.port == "/dev/serial0"
         assert io.baudrate == 115200
 
     def test_custom_settings(self) -> None:

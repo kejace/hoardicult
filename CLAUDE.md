@@ -83,7 +83,7 @@ Commands use `e` prefix for relay control:
 ## Configuration
 
 Copy `.env.example` to `.env`:
-- `SERIAL_PORT` - IOExpander device (e.g., `/dev/ttyUSB0`)
+- `SERIAL_PORT` - IOExpander device (e.g., `/dev/serial0`)
 - `SERIAL_BAUDRATE` - Default 115200
 - `BOARDS_CONFIG_PATH` - Path to `boards.json`
 
