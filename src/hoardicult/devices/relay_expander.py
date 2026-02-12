@@ -210,10 +210,10 @@ class RelayController:
         prev_relay: int | None = None
 
         for relay_num in range(1, relay_count + 1):
-            await self.relay_on(board_addr, relay_num)
-            await asyncio.sleep(delay_sec)
             if prev_relay:
                 await self.relay_off(board_addr, prev_relay)
+            await self.relay_on(board_addr, relay_num)
+            await asyncio.sleep(delay_sec)
             prev_relay = relay_num
 
         # Turn off final relay
