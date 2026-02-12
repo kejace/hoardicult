@@ -70,6 +70,11 @@ class IOExpander:
         except serial.SerialException as e:
             raise IOExpanderConnectionError(f"Failed to connect: {e}") from e
 
+        if sys.platform == "linux":
+            # Send zero byte to activate 9-bit multi-drop mode
+            self._serial.write(bytes([0]))
+            self._serial.flush()
+
     def disconnect(self) -> None:
         """Close serial connection."""
         if self._serial and self._serial.is_open:
@@ -163,10 +168,12 @@ class IOExpander:
             raise IOExpanderConnectionError("Not connected to IOExpander")
 
         self._address_board(board_address)
-        self._serial.write(command.encode())  # type: ignore[union-attr]
+        self._serial.write((command + "\r").encode())  # type: ignore[union-attr]
         self._serial.flush()  # type: ignore[union-attr]
 
         if expect_response:
+            # Response format: "echo\r\nresult\r\n>"
+            self._serial.readline()  # discard echo  # type: ignore[union-attr]
             response = self._serial.readline()  # type: ignore[union-attr]
             return response.decode().strip()
         return None
@@ -203,7 +210,7 @@ class IOExpander:
         """Send command to IOExpander (legacy single-board interface)."""
         if not self._serial or not self._serial.is_open:
             raise IOExpanderConnectionError("Not connected to IOExpander")
-        self._serial.write(command.encode())
+        self._serial.write((command + "\r").encode())
         response = self._serial.readline()
         return response.decode().strip()
 
