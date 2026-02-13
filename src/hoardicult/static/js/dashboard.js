@@ -207,8 +207,8 @@ async function handleRelayClick(relayEl) {
 
     } catch (error) {
         console.error(`Failed to ${action} relay:`, error);
-        relayEl.classList.remove('pending');
     } finally {
+        relayEl.classList.remove('pending');
         pendingRequests.delete(requestKey);
     }
 }
