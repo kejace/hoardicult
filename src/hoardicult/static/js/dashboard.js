@@ -110,10 +110,37 @@ function updateBoards(boards) {
         // Just update relay states
         boards.forEach(board => {
             board.relays.forEach(relay => {
-                updateRelayState(board.board_addr, relay.relay_num, relay.state, relay.simulated);
+                updateRelayState(board.board_addr, relay.relay_num, relay.state, relay.simulated, relay.schedule);
             });
         });
     }
+}
+
+function getScheduleBadge(schedule) {
+    if (!schedule) return '';
+    const labels = { single: 'S', interval: 'I', dawn_dusk: 'D' };
+    const label = labels[schedule.mode] || '?';
+    return `<span class="schedule-badge">${label}</span>`;
+}
+
+function buildScheduleSummary(relays) {
+    const scheduled = relays.filter(r => r.schedule);
+    if (scheduled.length === 0) return '';
+
+    const modeLabels = { single: 'Single', interval: 'Interval', dawn_dusk: 'Dawn/Dusk' };
+    const items = scheduled.map(r => {
+        const s = r.schedule;
+        const label = modeLabels[s.mode] || s.mode;
+        const next = s.scheduled ? `OFF ${s.next_off || '—'}` : `ON ${s.next_on || '—'}`;
+        return `<div class="schedule-item">
+            <span class="schedule-relay">R${r.relay_num}</span>
+            <span class="schedule-mode">${label}</span>
+            <span class="schedule-time">${s.total_minutes}min/day</span>
+            <span class="schedule-next">Next: ${next}</span>
+        </div>`;
+    }).join('');
+
+    return `<div class="schedule-summary"><div class="schedule-summary-title">Schedules</div>${items}</div>`;
 }
 
 function rebuildBoards(boards) {
@@ -139,16 +166,19 @@ function rebuildBoards(boards) {
                 ${board.relays.map(relay => {
                     const classes = ['relay', relay.state];
                     if (relay.simulated) classes.push('simulated');
+                    if (relay.schedule && relay.schedule.scheduled) classes.push('scheduled');
+                    const badge = getScheduleBadge(relay.schedule);
                     return `
                         <div class="${classes.join(' ')}"
                              data-addr="${board.board_addr}"
                              data-num="${relay.relay_num}"
-                             title="Relay ${relay.relay_num}: ${relay.state}${relay.simulated ? ' (simulated)' : ''}">
-                            ${relay.relay_num}
+                             title="Relay ${relay.relay_num}: ${relay.state}${relay.simulated ? ' (simulated)' : ''}${relay.schedule ? ' [' + relay.schedule.mode + ']' : ''}">
+                            ${badge}${relay.relay_num}
                         </div>
                     `;
                 }).join('')}
             </div>
+            ${buildScheduleSummary(board.relays)}
         `;
 
         // Add click handlers for relays
@@ -160,18 +190,21 @@ function rebuildBoards(boards) {
     });
 }
 
-function updateRelayState(boardAddr, relayNum, state, simulated) {
+function updateRelayState(boardAddr, relayNum, state, simulated, schedule) {
     const relayEl = document.querySelector(
         `.relay[data-addr="${boardAddr}"][data-num="${relayNum}"]`
     );
 
     if (relayEl) {
-        relayEl.classList.remove('on', 'off', 'unknown', 'simulated', 'pending');
+        relayEl.classList.remove('on', 'off', 'unknown', 'simulated', 'pending', 'scheduled');
         relayEl.classList.add(state);
         if (simulated) {
             relayEl.classList.add('simulated');
         }
-        relayEl.title = `Relay ${relayNum}: ${state}${simulated ? ' (simulated)' : ''}`;
+        if (schedule && schedule.scheduled) {
+            relayEl.classList.add('scheduled');
+        }
+        relayEl.title = `Relay ${relayNum}: ${state}${simulated ? ' (simulated)' : ''}${schedule ? ' [' + schedule.mode + ']' : ''}`;
     }
 }
 

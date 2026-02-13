@@ -1,8 +1,67 @@
 """Pydantic models for relay API."""
 
-from pydantic import BaseModel, Field
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Discriminator, Field, Tag
 
 from hoardicult.devices.relay_expander import RelayState
+
+# --- Schedule models ---
+
+
+class SingleSchedule(BaseModel):
+    """One continuous block at a fixed start time."""
+
+    mode: Literal["single"] = "single"
+    total_minutes: int = Field(..., ge=1, le=1440)
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+
+class IntervalSchedule(BaseModel):
+    """Evenly-spaced runs across 24 hours."""
+
+    mode: Literal["interval"] = "interval"
+    total_minutes: int = Field(..., ge=1, le=1440)
+    interval_count: int = Field(..., ge=1, le=96)
+
+
+class DawnDuskSchedule(BaseModel):
+    """Half at dawn_time, half at dusk_time."""
+
+    mode: Literal["dawn_dusk"] = "dawn_dusk"
+    total_minutes: int = Field(..., ge=1, le=1440)
+    dawn_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    dusk_time: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+
+def _schedule_discriminator(v: dict | BaseModel) -> str:
+    if isinstance(v, dict):
+        return v.get("mode", "single")
+    return getattr(v, "mode", "single")
+
+
+RelaySchedule = Annotated[
+    Annotated[SingleSchedule, Tag("single")]
+    | Annotated[IntervalSchedule, Tag("interval")]
+    | Annotated[DawnDuskSchedule, Tag("dawn_dusk")],
+    Discriminator(_schedule_discriminator),
+]
+
+
+class RelayScheduleInfo(BaseModel):
+    """Schedule state info included in health responses."""
+
+    mode: str = Field(..., description="Schedule mode: single, interval, dawn_dusk")
+    total_minutes: int = Field(..., description="Total minutes per day")
+    next_on: str | None = Field(None, description="Next scheduled ON time (HH:MM)")
+    next_off: str | None = Field(None, description="Next scheduled OFF time (HH:MM)")
+    scheduled: bool = Field(
+        default=False,
+        description="True if scheduler is actively controlling this relay",
+    )
+
+
+# --- API / config models ---
 
 
 class RelayResponse(BaseModel):
@@ -23,6 +82,9 @@ class BoardConfig(BaseModel):
     )
     relay_count: int = Field(
         default=16, ge=1, le=256, description="Total relays on this board"
+    )
+    schedules: dict[str, RelaySchedule] = Field(
+        default_factory=dict, description="Relay schedules keyed by relay number"
     )
 
 
@@ -64,6 +126,9 @@ class RelayStateInfo(BaseModel):
     state: RelayState = Field(..., description="Current relay state")
     simulated: bool = Field(
         default=False, description="True if state is simulated (not on hardware)"
+    )
+    schedule: RelayScheduleInfo | None = Field(
+        default=None, description="Schedule info if relay has a schedule"
     )
 
 

@@ -243,6 +243,7 @@ main {
 }
 
 .relay {
+    position: relative;
     aspect-ratio: 1;
     background-color: var(--bg-relay);
     border: 2px solid var(--border-color);
@@ -295,6 +296,59 @@ main {
 .relay.pending {
     opacity: 0.6;
     cursor: wait;
+}
+
+.relay.scheduled {
+    border-color: #a855f7;
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+
+.schedule-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: #fff;
+    background-color: #a855f7;
+    border-radius: 3px;
+    padding: 0 3px;
+    line-height: 1.3;
+}
+
+.schedule-summary {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.schedule-summary-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.schedule-item {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    padding: 0.25rem 0;
+}
+
+.schedule-relay {
+    font-weight: 600;
+    color: #a855f7;
+    min-width: 2.5rem;
+}
+
+.schedule-mode {
+    min-width: 5rem;
+}
+
+.schedule-next {
+    color: var(--text-primary);
 }
 
 footer {

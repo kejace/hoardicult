@@ -23,6 +23,7 @@ from hoardicult.models.relay import (
     SystemSummary,
 )
 from hoardicult.services.config_loader import load_boards_config
+from hoardicult.services.scheduler import SchedulerService
 from hoardicult.services.ws_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Global instances (managed by lifespan)
 ioexpander: IOExpander | None = None
 relay_controller: RelayController | None = None
+scheduler: SchedulerService | None = None
 board_configs: list[dict] = []
 ws_manager = ConnectionManager()
 
@@ -37,7 +39,7 @@ ws_manager = ConnectionManager()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifecycle management."""
-    global ioexpander, relay_controller, board_configs
+    global ioexpander, relay_controller, scheduler, board_configs
 
     # Load board configurations
     board_configs = load_boards_config(settings.boards_config_path)
@@ -74,7 +76,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             except Exception as e:
                 logger.error(f"Failed to configure board {board_addr}: {e}")
 
+    # Start scheduler
+    scheduler = SchedulerService(relay_controller, board_configs)
+    scheduler.start()
+
     yield
+
+    # Shutdown: stop scheduler first
+    if scheduler:
+        await scheduler.stop()
 
     # Shutdown: close all valves for safety
     if ioexpander.is_connected and relay_controller:
@@ -130,8 +140,19 @@ def _build_health_snapshot() -> dict:
                 state = RelayState.UNKNOWN
                 simulated = False
 
+            sched_info = None
+            if scheduler:
+                info = scheduler.get_schedule_info(board_addr, relay_num)
+                if info:
+                    sched_info = info.model_dump()
+
             relays.append(
-                {"relay_num": relay_num, "state": state.value, "simulated": simulated}
+                {
+                    "relay_num": relay_num,
+                    "state": state.value,
+                    "simulated": simulated,
+                    "schedule": sched_info,
+                }
             )
 
             if state == RelayState.ON:
@@ -234,8 +255,17 @@ async def health_check() -> HealthResponse:
                 state = RelayState.UNKNOWN
                 simulated = False
 
+            sched_info = None
+            if scheduler:
+                sched_info = scheduler.get_schedule_info(board_addr, relay_num)
+
             relays.append(
-                RelayStateInfo(relay_num=relay_num, state=state, simulated=simulated)
+                RelayStateInfo(
+                    relay_num=relay_num,
+                    state=state,
+                    simulated=simulated,
+                    schedule=sched_info,
+                )
             )
 
             if state == RelayState.ON:
