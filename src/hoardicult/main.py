@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -22,6 +22,7 @@ from hoardicult.models.relay import (
     SystemSummary,
 )
 from hoardicult.services.config_loader import load_boards_config
+from hoardicult.services.ws_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 ioexpander: IOExpander | None = None
 relay_controller: RelayController | None = None
 board_configs: list[dict] = []
+ws_manager = ConnectionManager()
 
 
 @asynccontextmanager
@@ -54,8 +56,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning(f"Could not connect to IOExpander: {e}")
         logger.warning("Running in disconnected mode - relay commands will fail")
 
-    # Initialize relay controller
-    relay_controller = RelayController(ioexpander)
+    # Initialize relay controller with WebSocket broadcast callback
+    relay_controller = RelayController(ioexpander, on_state_change=broadcast_state)
     set_relay_controller(relay_controller)
 
     # Configure RelayExpander counts for each board
@@ -101,6 +103,84 @@ app = FastAPI(
 STATIC_DIR = Path(__file__).parent / "static"
 
 app.include_router(boards_router)
+
+
+def _build_health_snapshot() -> dict:
+    """Build the health snapshot dict (shared by /health and WebSocket broadcast)."""
+    connected = ioexpander.is_connected if ioexpander else False
+
+    boards_health: list[dict] = []
+    total_relays = 0
+    relays_on = 0
+    relays_off = 0
+    relays_unknown = 0
+
+    for config in board_configs:
+        board_addr = config["board_addr"]
+        relay_count = config.get("relay_count", 16)
+        total_relays += relay_count
+
+        relays: list[dict] = []
+        for relay_num in range(1, relay_count + 1):
+            if relay_controller:
+                state = relay_controller.get_relay_state(board_addr, relay_num)
+                simulated = relay_controller.is_simulated(board_addr, relay_num)
+            else:
+                state = RelayState.UNKNOWN
+                simulated = False
+
+            relays.append(
+                {"relay_num": relay_num, "state": state.value, "simulated": simulated}
+            )
+
+            if state == RelayState.ON:
+                relays_on += 1
+            elif state == RelayState.OFF:
+                relays_off += 1
+            else:
+                relays_unknown += 1
+
+        boards_health.append(
+            {
+                "board_addr": board_addr,
+                "name": config.get("name", ""),
+                "relay_count": relay_count,
+                "relays": relays,
+            }
+        )
+
+    return {
+        "status": "ok",
+        "ioexpander_connected": connected,
+        "timestamp": datetime.now(UTC).isoformat(),
+        "summary": {
+            "total_boards": len(board_configs),
+            "total_relays": total_relays,
+            "relays_on": relays_on,
+            "relays_off": relays_off,
+            "relays_unknown": relays_unknown,
+        },
+        "boards": boards_health,
+    }
+
+
+async def broadcast_state() -> None:
+    """Build health snapshot and broadcast to all WebSocket clients."""
+    await ws_manager.broadcast(_build_health_snapshot())
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """WebSocket endpoint for real-time state updates."""
+    await ws_manager.connect(websocket)
+    try:
+        # Send initial state
+        await websocket.send_json(_build_health_snapshot())
+        # Keep connection alive until client disconnects
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
 
 
 @app.get("/", include_in_schema=False)

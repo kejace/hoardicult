@@ -14,6 +14,7 @@ Reference: https://www.zevendevelopment.com/relayexpander.html
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from enum import Enum
 
 from hoardicult.devices.ioexpander import IOExpander
@@ -30,17 +31,28 @@ class RelayState(str, Enum):
 class RelayController:
     """Control relays via RelayExpander boards connected to IOExpander."""
 
-    def __init__(self, ioexpander: IOExpander) -> None:
+    def __init__(
+        self,
+        ioexpander: IOExpander,
+        on_state_change: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         """Initialize relay controller.
 
         Args:
             ioexpander: Connected IOExpander instance for communication
+            on_state_change: Async callback fired after every state mutation
         """
         self._io = ioexpander
+        self._on_state_change = on_state_change
         # Track relay states: (board_addr, relay_num) -> state
         self._states: dict[tuple[int, int], RelayState] = {}
         # Track which relays are simulated (not sent to hardware)
         self._simulated: set[tuple[int, int]] = set()
+
+    async def _notify_state_change(self) -> None:
+        """Call the state change callback if one is registered."""
+        if self._on_state_change is not None:
+            await self._on_state_change()
 
     @property
     def is_connected(self) -> bool:
@@ -64,6 +76,7 @@ class RelayController:
         )
         self._states[(board_addr, relay_num)] = RelayState.ON
         self._simulated.discard((board_addr, relay_num))
+        await self._notify_state_change()
 
     async def relay_off(self, board_addr: int, relay_num: int) -> None:
         """Turn off a relay (deactivate solenoid valve).
@@ -78,8 +91,9 @@ class RelayController:
         )
         self._states[(board_addr, relay_num)] = RelayState.OFF
         self._simulated.discard((board_addr, relay_num))
+        await self._notify_state_change()
 
-    def relay_on_simulated(self, board_addr: int, relay_num: int) -> None:
+    async def relay_on_simulated(self, board_addr: int, relay_num: int) -> None:
         """Simulate turning on a relay (state only, no hardware command).
 
         Args:
@@ -89,8 +103,9 @@ class RelayController:
         self._validate_relay_num(relay_num)
         self._states[(board_addr, relay_num)] = RelayState.ON
         self._simulated.add((board_addr, relay_num))
+        await self._notify_state_change()
 
-    def relay_off_simulated(self, board_addr: int, relay_num: int) -> None:
+    async def relay_off_simulated(self, board_addr: int, relay_num: int) -> None:
         """Simulate turning off a relay (state only, no hardware command).
 
         Args:
@@ -100,6 +115,7 @@ class RelayController:
         self._validate_relay_num(relay_num)
         self._states[(board_addr, relay_num)] = RelayState.OFF
         self._simulated.add((board_addr, relay_num))
+        await self._notify_state_change()
 
     def get_relay_state(self, board_addr: int, relay_num: int) -> RelayState:
         """Get cached state of a relay.
@@ -136,8 +152,9 @@ class RelayController:
             if key[0] == board_addr:
                 self._states[key] = RelayState.OFF
                 self._simulated.discard(key)
+        await self._notify_state_change()
 
-    def close_all_on_board_simulated(
+    async def close_all_on_board_simulated(
         self, board_addr: int, relay_count: int = 256
     ) -> None:
         """Simulate closing all relays on a board (state only, no hardware).
@@ -150,6 +167,7 @@ class RelayController:
             key = (board_addr, relay_num)
             self._states[key] = RelayState.OFF
             self._simulated.add(key)
+        await self._notify_state_change()
 
     async def set_relay_expander_count(self, board_addr: int, count: int) -> None:
         """Configure the number of RelayExpander boards connected.
@@ -240,15 +258,15 @@ class RelayController:
         prev_relay: int | None = None
 
         for relay_num in range(1, relay_count + 1):
-            self.relay_on_simulated(board_addr, relay_num)
+            await self.relay_on_simulated(board_addr, relay_num)
             await asyncio.sleep(delay_sec)
             if prev_relay:
-                self.relay_off_simulated(board_addr, prev_relay)
+                await self.relay_off_simulated(board_addr, prev_relay)
             prev_relay = relay_num
 
         # Turn off final relay
         if prev_relay:
-            self.relay_off_simulated(board_addr, prev_relay)
+            await self.relay_off_simulated(board_addr, prev_relay)
 
     def _validate_relay_num(self, relay_num: int) -> None:
         """Validate relay number is in valid range."""

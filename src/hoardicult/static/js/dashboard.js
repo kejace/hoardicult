@@ -1,6 +1,6 @@
 // Dashboard state
-let pollInterval = 250;
-let pollTimer = null;
+let ws = null;
+let reconnectDelay = 1000;
 let pendingRequests = new Set();
 let demoRunning = false;
 
@@ -11,7 +11,6 @@ const statusDot = connectionStatus.querySelector('.status-dot');
 const statusText = connectionStatus.querySelector('.status-text');
 const emergencyStop = document.getElementById('emergency-stop');
 const demoBtn = document.getElementById('demo-btn');
-const pollIntervalSelect = document.getElementById('poll-interval');
 const demoDelaySelect = document.getElementById('demo-delay');
 const lastUpdateSpan = document.getElementById('last-update');
 const totalBoardsSpan = document.getElementById('total-boards');
@@ -21,42 +20,37 @@ const relaysUnknownSpan = document.getElementById('relays-unknown');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    pollIntervalSelect.addEventListener('change', handlePollIntervalChange);
     emergencyStop.addEventListener('click', handleEmergencyStop);
     demoBtn.addEventListener('click', handleDemo);
-    startPolling();
+    connectWebSocket();
 });
 
-function handlePollIntervalChange() {
-    pollInterval = parseInt(pollIntervalSelect.value, 10);
-    restartPolling();
-}
+function connectWebSocket() {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
-function startPolling() {
-    fetchHealth();
-    pollTimer = setInterval(fetchHealth, pollInterval);
-}
+    ws.onopen = () => {
+        reconnectDelay = 1000;
+        setConnectionStatus(false, true);
+    };
 
-function restartPolling() {
-    if (pollTimer) {
-        clearInterval(pollTimer);
-    }
-    startPolling();
-}
-
-async function fetchHealth() {
-    try {
-        const response = await fetch('/health');
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
         updateDashboard(data);
         setConnectionStatus(data.ioexpander_connected, true);
-    } catch (error) {
-        console.error('Failed to fetch health:', error);
+    };
+
+    ws.onclose = () => {
         setConnectionStatus(false, false);
-    }
+        setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+            connectWebSocket();
+        }, reconnectDelay);
+    };
+
+    ws.onerror = () => {
+        ws.close();
+    };
 }
 
 function setConnectionStatus(ioConnected, apiConnected) {
@@ -64,7 +58,7 @@ function setConnectionStatus(ioConnected, apiConnected) {
 
     if (!apiConnected) {
         statusDot.classList.add('disconnected');
-        statusText.textContent = 'API Disconnected';
+        statusText.textContent = 'Disconnected';
     } else if (ioConnected) {
         statusDot.classList.add('connected');
         statusText.textContent = 'Connected';
@@ -198,12 +192,7 @@ async function handleRelayClick(relayEl) {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        const data = await response.json();
-
-        // Update the relay state immediately
-        relayEl.classList.remove('on', 'off', 'unknown', 'pending', 'simulated');
-        relayEl.classList.add(data.state);
-        relayEl.title = `Relay ${relayNum}: ${data.state}`;
+        // WebSocket push will update the UI state
 
     } catch (error) {
         console.error(`Failed to ${action} relay:`, error);
@@ -263,8 +252,7 @@ async function handleEmergencyStop() {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        // Force an immediate refresh
-        await fetchHealth();
+        // WebSocket push will update the UI state
 
     } catch (error) {
         console.error('Emergency stop failed:', error);
