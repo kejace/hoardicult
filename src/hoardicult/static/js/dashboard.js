@@ -165,8 +165,8 @@ function updateRelayState(boardAddr, relayNum, state, simulated) {
         `.relay[data-addr="${boardAddr}"][data-num="${relayNum}"]`
     );
 
-    if (relayEl && !relayEl.classList.contains('pending')) {
-        relayEl.classList.remove('on', 'off', 'unknown', 'simulated');
+    if (relayEl) {
+        relayEl.classList.remove('on', 'off', 'unknown', 'simulated', 'pending');
         relayEl.classList.add(state);
         if (simulated) {
             relayEl.classList.add('simulated');
