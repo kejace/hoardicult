@@ -3,17 +3,19 @@
 import json
 from pathlib import Path
 
-from hoardicult.models.relay import BoardsConfig
+from hoardicult.models.relay import BoardsConfig, RelaySchedule
 
 
-def load_boards_config(config_path: str | Path) -> list[dict]:
-    """Load board configurations from JSON file.
+def load_boards_config(
+    config_path: str | Path,
+) -> tuple[list[dict], dict[str, RelaySchedule]]:
+    """Load board configurations and schedule presets from JSON file.
 
     Args:
         config_path: Path to boards.json configuration file
 
     Returns:
-        List of board configuration dictionaries
+        Tuple of (board config dicts, schedule presets dict)
 
     Raises:
         FileNotFoundError: If config file doesn't exist
@@ -22,13 +24,12 @@ def load_boards_config(config_path: str | Path) -> list[dict]:
     path = Path(config_path)
 
     if not path.exists():
-        # Return empty config if file doesn't exist (allows testing without config)
-        return []
+        return [], {}
 
     with open(path) as f:
         data = json.load(f)
 
-    # Validate with Pydantic
     config = BoardsConfig(**data)
 
-    return [board.model_dump() for board in config.boards]
+    board_dicts = [board.model_dump() for board in config.boards]
+    return board_dicts, config.schedule_presets

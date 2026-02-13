@@ -83,9 +83,6 @@ class BoardConfig(BaseModel):
     relay_count: int = Field(
         default=16, ge=1, le=256, description="Total relays on this board"
     )
-    schedules: dict[str, RelaySchedule] = Field(
-        default_factory=dict, description="Relay schedules keyed by relay number"
-    )
 
 
 class BoardInfo(BaseModel):
@@ -113,6 +110,9 @@ class RelayListResponse(BaseModel):
 class BoardsConfig(BaseModel):
     """Root configuration for all boards."""
 
+    schedule_presets: dict[str, RelaySchedule] = Field(
+        default_factory=dict, description="Named schedule presets"
+    )
     boards: list[BoardConfig]
 
 
@@ -126,9 +126,6 @@ class RelayStateInfo(BaseModel):
     state: RelayState = Field(..., description="Current relay state")
     simulated: bool = Field(
         default=False, description="True if state is simulated (not on hardware)"
-    )
-    schedule: RelayScheduleInfo | None = Field(
-        default=None, description="Schedule info if relay has a schedule"
     )
 
 
@@ -153,6 +150,24 @@ class SystemSummary(BaseModel):
     relays_unknown: int = Field(..., description="Number of relays in unknown state")
 
 
+class ScheduleStatusResponse(BaseModel):
+    """Response for GET /schedule."""
+
+    presets: dict[str, dict] = Field(..., description="Available schedule presets")
+    active_preset: str | None = Field(None, description="Currently active preset name")
+    schedule_info: RelayScheduleInfo | None = Field(
+        None, description="Active schedule details"
+    )
+
+
+class SetPresetRequest(BaseModel):
+    """Request body for PUT /schedule."""
+
+    active_preset: str | None = Field(
+        None, description="Preset name or null to disable"
+    )
+
+
 class HealthResponse(BaseModel):
     """Full health response with relay states."""
 
@@ -162,4 +177,7 @@ class HealthResponse(BaseModel):
     summary: SystemSummary = Field(..., description="System summary statistics")
     boards: list[BoardHealthInfo] = Field(
         ..., description="All boards with relay states"
+    )
+    active_schedule: RelayScheduleInfo | None = Field(
+        None, description="Global active schedule info"
     )

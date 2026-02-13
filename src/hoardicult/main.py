@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +20,8 @@ from hoardicult.models.relay import (
     BoardHealthInfo,
     HealthResponse,
     RelayStateInfo,
+    ScheduleStatusResponse,
+    SetPresetRequest,
     SystemSummary,
 )
 from hoardicult.services.config_loader import load_boards_config
@@ -41,10 +43,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifecycle management."""
     global ioexpander, relay_controller, scheduler, board_configs
 
-    # Load board configurations
-    board_configs = load_boards_config(settings.boards_config_path)
+    # Load board configurations and schedule presets
+    board_configs, schedule_presets = load_boards_config(settings.boards_config_path)
     set_board_configs(board_configs)
     logger.info(f"Loaded {len(board_configs)} board configurations")
+    logger.info(f"Loaded {len(schedule_presets)} schedule presets")
 
     # Initialize IOExpander connection
     ioexpander = IOExpander(
@@ -76,8 +79,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             except Exception as e:
                 logger.error(f"Failed to configure board {board_addr}: {e}")
 
-    # Start scheduler
-    scheduler = SchedulerService(relay_controller, board_configs)
+    # Start scheduler with presets and state persistence
+    state_path = Path(settings.boards_config_path).parent / "schedule_state.json"
+    scheduler = SchedulerService(
+        relay_controller, board_configs, schedule_presets, state_path
+    )
     scheduler.start()
 
     yield
@@ -140,18 +146,11 @@ def _build_health_snapshot() -> dict:
                 state = RelayState.UNKNOWN
                 simulated = False
 
-            sched_info = None
-            if scheduler:
-                info = scheduler.get_schedule_info(board_addr, relay_num)
-                if info:
-                    sched_info = info.model_dump()
-
             relays.append(
                 {
                     "relay_num": relay_num,
                     "state": state.value,
                     "simulated": simulated,
-                    "schedule": sched_info,
                 }
             )
 
@@ -171,6 +170,12 @@ def _build_health_snapshot() -> dict:
             }
         )
 
+    active_schedule = None
+    if scheduler:
+        info = scheduler.get_active_schedule_info()
+        if info:
+            active_schedule = info.model_dump()
+
     return {
         "status": "ok",
         "ioexpander_connected": connected,
@@ -183,6 +188,7 @@ def _build_health_snapshot() -> dict:
             "relays_unknown": relays_unknown,
         },
         "boards": boards_health,
+        "active_schedule": active_schedule,
     }
 
 
@@ -203,6 +209,28 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
+
+
+@app.get("/schedule", response_model=ScheduleStatusResponse)
+async def get_schedule() -> dict:
+    """Get schedule presets and active preset."""
+    if not scheduler:
+        return {"presets": {}, "active_preset": None, "schedule_info": None}
+    return scheduler.get_status()
+
+
+@app.put("/schedule")
+async def set_schedule(body: SetPresetRequest) -> dict:
+    """Set the active schedule preset."""
+    if not scheduler:
+        raise HTTPException(status_code=503, detail="Scheduler not initialized")
+    try:
+        await scheduler.set_active_preset(body.active_preset)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    # Broadcast updated state to all WS clients
+    await broadcast_state()
+    return scheduler.get_status()
 
 
 @app.get("/version")
@@ -255,16 +283,11 @@ async def health_check() -> HealthResponse:
                 state = RelayState.UNKNOWN
                 simulated = False
 
-            sched_info = None
-            if scheduler:
-                sched_info = scheduler.get_schedule_info(board_addr, relay_num)
-
             relays.append(
                 RelayStateInfo(
                     relay_num=relay_num,
                     state=state,
                     simulated=simulated,
-                    schedule=sched_info,
                 )
             )
 
@@ -292,10 +315,15 @@ async def health_check() -> HealthResponse:
         relays_unknown=relays_unknown,
     )
 
+    active_schedule = None
+    if scheduler:
+        active_schedule = scheduler.get_active_schedule_info()
+
     return HealthResponse(
         status="ok",
         ioexpander_connected=connected,
         timestamp=datetime.now(UTC).isoformat(),
         summary=summary,
         boards=boards_health,
+        active_schedule=active_schedule,
     )

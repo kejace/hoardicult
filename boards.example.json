@@ -1,15 +1,15 @@
 {
+  "schedule_presets": {
+    "morning":    { "mode": "single",    "total_minutes": 30, "start_time": "06:00" },
+    "every_4hrs": { "mode": "interval",  "total_minutes": 30, "interval_count": 6 },
+    "dawn_dusk":  { "mode": "dawn_dusk", "total_minutes": 30, "dawn_time": "06:00", "dusk_time": "18:00" }
+  },
   "boards": [
     {
       "board_addr": 1,
       "name": "Front Garden",
       "relay_expander_count": 2,
-      "relay_count": 32,
-      "schedules": {
-        "1": { "mode": "single",    "total_minutes": 30, "start_time": "06:00" },
-        "2": { "mode": "interval",  "total_minutes": 30, "interval_count": 6 },
-        "3": { "mode": "dawn_dusk", "total_minutes": 30, "dawn_time": "06:00", "dusk_time": "18:00" }
-      }
+      "relay_count": 32
     },
     {
       "board_addr": 2,

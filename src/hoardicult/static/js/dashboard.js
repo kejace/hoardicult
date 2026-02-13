@@ -3,6 +3,8 @@ let ws = null;
 let reconnectDelay = 1000;
 let pendingRequests = new Set();
 let demoRunning = false;
+let schedulePresets = {};
+let activePreset = null;
 
 // DOM elements
 const boardsContainer = document.getElementById('boards-container');
@@ -12,6 +14,7 @@ const statusText = connectionStatus.querySelector('.status-text');
 const emergencyStop = document.getElementById('emergency-stop');
 const demoBtn = document.getElementById('demo-btn');
 const demoDelaySelect = document.getElementById('demo-delay');
+const scheduleSelect = document.getElementById('schedule-select');
 const lastUpdateSpan = document.getElementById('last-update');
 const totalBoardsSpan = document.getElementById('total-boards');
 const relaysOnSpan = document.getElementById('relays-on');
@@ -22,8 +25,10 @@ const relaysUnknownSpan = document.getElementById('relays-unknown');
 document.addEventListener('DOMContentLoaded', () => {
     emergencyStop.addEventListener('click', handleEmergencyStop);
     demoBtn.addEventListener('click', handleDemo);
+    scheduleSelect.addEventListener('change', handleScheduleChange);
     connectWebSocket();
     fetchVersion();
+    fetchSchedule();
 });
 
 async function fetchVersion() {
@@ -33,6 +38,55 @@ async function fetchVersion() {
         document.getElementById('version').textContent = data.commit.slice(0, 7);
     } catch {
         document.getElementById('version').textContent = 'unknown';
+    }
+}
+
+async function fetchSchedule() {
+    try {
+        const response = await fetch('/schedule');
+        const data = await response.json();
+        schedulePresets = data.presets || {};
+        activePreset = data.active_preset;
+        populateScheduleDropdown();
+    } catch (e) {
+        console.error('Failed to fetch schedule:', e);
+    }
+}
+
+function populateScheduleDropdown() {
+    // Keep the "Off" option, remove the rest
+    while (scheduleSelect.options.length > 1) {
+        scheduleSelect.remove(1);
+    }
+    for (const name of Object.keys(schedulePresets)) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        scheduleSelect.appendChild(opt);
+    }
+    scheduleSelect.value = activePreset || '';
+}
+
+async function handleScheduleChange() {
+    const value = scheduleSelect.value || null;
+    scheduleSelect.disabled = true;
+    try {
+        const response = await fetch('/schedule', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active_preset: value }),
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        activePreset = data.active_preset;
+    } catch (e) {
+        console.error('Failed to set schedule:', e);
+        // Revert dropdown
+        scheduleSelect.value = activePreset || '';
+    } finally {
+        scheduleSelect.disabled = false;
     }
 }
 
@@ -89,11 +143,14 @@ function updateDashboard(data) {
     const timestamp = new Date(data.timestamp);
     lastUpdateSpan.textContent = timestamp.toLocaleTimeString();
 
+    // Track active schedule from WS data
+    const hasActiveSchedule = data.active_schedule && data.active_schedule.scheduled;
+
     // Update boards
-    updateBoards(data.boards);
+    updateBoards(data.boards, hasActiveSchedule);
 }
 
-function updateBoards(boards) {
+function updateBoards(boards, hasActiveSchedule) {
     // Check if we need to rebuild the structure
     const existingBoards = boardsContainer.querySelectorAll('.board');
     const needsRebuild = existingBoards.length !== boards.length ||
@@ -105,45 +162,18 @@ function updateBoards(boards) {
         });
 
     if (needsRebuild) {
-        rebuildBoards(boards);
+        rebuildBoards(boards, hasActiveSchedule);
     } else {
         // Just update relay states
         boards.forEach(board => {
             board.relays.forEach(relay => {
-                updateRelayState(board.board_addr, relay.relay_num, relay.state, relay.simulated, relay.schedule);
+                updateRelayState(board.board_addr, relay.relay_num, relay.state, relay.simulated, hasActiveSchedule);
             });
         });
     }
 }
 
-function getScheduleBadge(schedule) {
-    if (!schedule) return '';
-    const labels = { single: 'S', interval: 'I', dawn_dusk: 'D' };
-    const label = labels[schedule.mode] || '?';
-    return `<span class="schedule-badge">${label}</span>`;
-}
-
-function buildScheduleSummary(relays) {
-    const scheduled = relays.filter(r => r.schedule);
-    if (scheduled.length === 0) return '';
-
-    const modeLabels = { single: 'Single', interval: 'Interval', dawn_dusk: 'Dawn/Dusk' };
-    const items = scheduled.map(r => {
-        const s = r.schedule;
-        const label = modeLabels[s.mode] || s.mode;
-        const next = s.scheduled ? `OFF ${s.next_off || '—'}` : `ON ${s.next_on || '—'}`;
-        return `<div class="schedule-item">
-            <span class="schedule-relay">R${r.relay_num}</span>
-            <span class="schedule-mode">${label}</span>
-            <span class="schedule-time">${s.total_minutes}min/day</span>
-            <span class="schedule-next">Next: ${next}</span>
-        </div>`;
-    }).join('');
-
-    return `<div class="schedule-summary"><div class="schedule-summary-title">Schedules</div>${items}</div>`;
-}
-
-function rebuildBoards(boards) {
+function rebuildBoards(boards, hasActiveSchedule) {
     boardsContainer.innerHTML = '';
 
     boards.forEach(board => {
@@ -166,19 +196,17 @@ function rebuildBoards(boards) {
                 ${board.relays.map(relay => {
                     const classes = ['relay', relay.state];
                     if (relay.simulated) classes.push('simulated');
-                    if (relay.schedule && relay.schedule.scheduled) classes.push('scheduled');
-                    const badge = getScheduleBadge(relay.schedule);
+                    if (hasActiveSchedule) classes.push('scheduled');
                     return `
                         <div class="${classes.join(' ')}"
                              data-addr="${board.board_addr}"
                              data-num="${relay.relay_num}"
-                             title="Relay ${relay.relay_num}: ${relay.state}${relay.simulated ? ' (simulated)' : ''}${relay.schedule ? ' [' + relay.schedule.mode + ']' : ''}">
-                            ${badge}${relay.relay_num}
+                             title="Relay ${relay.relay_num}: ${relay.state}${relay.simulated ? ' (simulated)' : ''}">
+                            ${relay.relay_num}
                         </div>
                     `;
                 }).join('')}
             </div>
-            ${buildScheduleSummary(board.relays)}
         `;
 
         // Add click handlers for relays
@@ -190,7 +218,7 @@ function rebuildBoards(boards) {
     });
 }
 
-function updateRelayState(boardAddr, relayNum, state, simulated, schedule) {
+function updateRelayState(boardAddr, relayNum, state, simulated, hasActiveSchedule) {
     const relayEl = document.querySelector(
         `.relay[data-addr="${boardAddr}"][data-num="${relayNum}"]`
     );
@@ -201,10 +229,10 @@ function updateRelayState(boardAddr, relayNum, state, simulated, schedule) {
         if (simulated) {
             relayEl.classList.add('simulated');
         }
-        if (schedule && schedule.scheduled) {
+        if (hasActiveSchedule) {
             relayEl.classList.add('scheduled');
         }
-        relayEl.title = `Relay ${relayNum}: ${state}${simulated ? ' (simulated)' : ''}${schedule ? ' [' + schedule.mode + ']' : ''}`;
+        relayEl.title = `Relay ${relayNum}: ${state}${simulated ? ' (simulated)' : ''}`;
     }
 }
 
