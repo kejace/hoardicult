@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import logging
+import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -181,6 +182,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
+
+
+@app.get("/version")
+async def version() -> dict:
+    """Return the current git commit hash."""
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).parent,
+            text=True,
+        ).strip()
+    except Exception:
+        commit = "unknown"
+    return {"commit": commit}
 
 
 @app.get("/", include_in_schema=False)
