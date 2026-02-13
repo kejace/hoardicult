@@ -23,7 +23,18 @@ document.addEventListener('DOMContentLoaded', () => {
     emergencyStop.addEventListener('click', handleEmergencyStop);
     demoBtn.addEventListener('click', handleDemo);
     connectWebSocket();
+    fetchVersion();
 });
+
+async function fetchVersion() {
+    try {
+        const response = await fetch('/version');
+        const data = await response.json();
+        document.getElementById('version').textContent = data.commit.slice(0, 7);
+    } catch {
+        document.getElementById('version').textContent = 'unknown';
+    }
+}
 
 function connectWebSocket() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
