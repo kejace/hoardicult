@@ -57,6 +57,30 @@ BoardAddrPath = Annotated[int, Path(ge=1, le=255, description="Board address")]
 RelayNumPath = Annotated[int, Path(ge=1, le=256, description="Relay number")]
 
 
+@router.get("/diagnostics")
+async def board_diagnostics(controller: RelayControllerDep) -> dict:
+    """Query each board for hardware info (#b, #v, #t)."""
+    if not controller.is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="IOExpander not connected",
+        )
+
+    results = []
+    for config in _board_configs:
+        board_addr = config["board_addr"]
+        info: dict = {"board_addr": board_addr, "name": config.get("name", "")}
+        cmds = [("#b", "hw_address"), ("#v", "voltage"), ("#t", "temp")]
+        for cmd, key in cmds:
+            try:
+                resp = await controller._io.send_command_to_board(board_addr, cmd)
+                info[key] = resp
+            except Exception as e:
+                info[key] = f"error: {e}"
+        results.append(info)
+    return {"boards": results}
+
+
 @router.get("", response_model=BoardListResponse)
 async def list_boards() -> BoardListResponse:
     """List all configured IOExpander boards."""
