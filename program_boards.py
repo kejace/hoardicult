@@ -132,11 +132,22 @@ def program_address(ser, old_addr, new_addr, mode):
         time.sleep(0.5)
         return try_normal_mode(ser, "#b")
     else:
+        # In multi-drop: address the board, then send #b<new> as data
         ser.reset_input_buffer()
-        try_multidrop(ser, old_addr, f"#b{new_addr}")
-        time.sleep(0.5)
+        set_mark(ser)
+        ser.write(bytes([old_addr]))
+        ser.flush()
+        set_space(ser)
+        ser.write(f"#b{new_addr}\r".encode())
+        ser.flush()
+        time.sleep(1.0)
         # Verify at new address
-        return try_multidrop(ser, new_addr, "#b")
+        result = try_multidrop(ser, new_addr, "#b")
+        if result:
+            return result
+        # Maybe board needs re-addressing after change, try old addr
+        result = try_multidrop(ser, old_addr, "#b")
+        return result
 
 
 def main():
