@@ -35,11 +35,23 @@ def open_serial():
 def send_command(ser, command):
     """Send command in normal (non-multi-drop) mode."""
     ser.reset_input_buffer()
-    ser.write((command + "\r").encode())
+    payload = (command + "\r").encode()
+    print(f"  [debug] sending: {payload!r}")
+    ser.write(payload)
     ser.flush()
-    ser.readline()  # discard echo
-    response = ser.readline()
-    return response.decode().strip()
+    # Read all available lines
+    lines = []
+    while True:
+        line = ser.readline()
+        if not line:
+            break
+        lines.append(line)
+        print(f"  [debug] recv: {line!r}")
+    if len(lines) >= 2:
+        return lines[1].decode().strip()
+    elif len(lines) == 1:
+        return lines[0].decode().strip()
+    return ""
 
 
 def set_address(ser, addr):
