@@ -21,6 +21,8 @@ const relaysOnSpan = document.getElementById('relays-on');
 const relaysOffSpan = document.getElementById('relays-off');
 const relaysUnknownSpan = document.getElementById('relays-unknown');
 
+let boardDiagnostics = {};
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     emergencyStop.addEventListener('click', handleEmergencyStop);
@@ -29,7 +31,32 @@ document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
     fetchVersion();
     fetchSchedule();
+    fetchDiagnostics();
+    setInterval(fetchDiagnostics, 30000);
 });
+
+async function fetchDiagnostics() {
+    try {
+        const response = await fetch('/boards/diagnostics');
+        const data = await response.json();
+        boardDiagnostics = {};
+        for (const board of data.boards) {
+            boardDiagnostics[board.board_addr] = board;
+        }
+        updateDiagnosticsDisplay();
+    } catch (e) {
+        console.error('Failed to fetch diagnostics:', e);
+    }
+}
+
+function updateDiagnosticsDisplay() {
+    for (const [addr, diag] of Object.entries(boardDiagnostics)) {
+        const el = document.querySelector(`.board-diagnostics[data-addr="${addr}"]`);
+        if (el) {
+            el.innerHTML = `${diag.voltage}V | ${diag.temp}&deg;C | hw:${diag.hw_address}`;
+        }
+    }
+}
 
 async function fetchVersion() {
     try {
@@ -182,6 +209,8 @@ function rebuildBoards(boards, hasActiveSchedule) {
         boardEl.dataset.addr = board.board_addr;
 
         const nameDisplay = board.name ? `<span class="board-name">(${board.name})</span>` : '';
+        const diag = boardDiagnostics[board.board_addr];
+        const diagText = diag ? `${diag.voltage}V | ${diag.temp}&deg;C | hw:${diag.hw_address}` : '';
 
         boardEl.innerHTML = `
             <div class="board-header">
@@ -189,7 +218,8 @@ function rebuildBoards(boards, hasActiveSchedule) {
                     Board ${board.board_addr} ${nameDisplay}
                 </div>
                 <div class="board-stats">
-                    ${board.relay_count} relays
+                    <span class="board-diagnostics" data-addr="${board.board_addr}">${diagText}</span>
+                    <span>${board.relay_count} relays</span>
                 </div>
             </div>
             <div class="relay-grid">

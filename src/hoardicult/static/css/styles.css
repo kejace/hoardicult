@@ -234,6 +234,15 @@ main {
 .board-stats {
     font-size: 0.85rem;
     color: var(--text-secondary);
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.board-diagnostics {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
 }
 
 .relay-grid {
