@@ -49,11 +49,22 @@ async function fetchDiagnostics() {
     }
 }
 
+function formatDiagnostics(diag) {
+    if (!diag) return '';
+    const parts = [];
+    const v = parseFloat(diag.voltage);
+    if (!isNaN(v) && v > 0 && v < 30) parts.push(`${v.toFixed(1)}V`);
+    const t = parseFloat(diag.temp);
+    if (!isNaN(t) && t > -20 && t < 80) parts.push(`${t.toFixed(1)}&deg;C`);
+    if (diag.hw_address) parts.push(`hw:${diag.hw_address}`);
+    return parts.join(' | ');
+}
+
 function updateDiagnosticsDisplay() {
     for (const [addr, diag] of Object.entries(boardDiagnostics)) {
         const el = document.querySelector(`.board-diagnostics[data-addr="${addr}"]`);
         if (el) {
-            el.innerHTML = `${diag.voltage}V | ${diag.temp}&deg;C | hw:${diag.hw_address}`;
+            el.innerHTML = formatDiagnostics(diag);
         }
     }
 }
@@ -210,7 +221,7 @@ function rebuildBoards(boards, hasActiveSchedule) {
 
         const nameDisplay = board.name ? `<span class="board-name">(${board.name})</span>` : '';
         const diag = boardDiagnostics[board.board_addr];
-        const diagText = diag ? `${diag.voltage}V | ${diag.temp}&deg;C | hw:${diag.hw_address}` : '';
+        const diagText = formatDiagnostics(diag);
 
         boardEl.innerHTML = `
             <div class="board-header">
