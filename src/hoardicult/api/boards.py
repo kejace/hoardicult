@@ -73,8 +73,10 @@ async def board_diagnostics(controller: RelayControllerDep) -> dict:
             "board_addr": board_addr,
             "name": config.get("name", ""),
         }
-        # Force re-addressing by clearing cache
+        # Force re-addressing and flush stale data
         controller._io._current_board = None
+        if controller._io._serial:
+            controller._io._serial.reset_input_buffer()
         cmds = [("#b", "hw_address"), ("#v", "voltage"), ("#t", "temp")]
         for cmd, key in cmds:
             try:
