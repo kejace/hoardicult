@@ -57,6 +57,35 @@ BoardAddrPath = Annotated[int, Path(ge=1, le=255, description="Board address")]
 RelayNumPath = Annotated[int, Path(ge=1, le=256, description="Relay number")]
 
 
+@router.get("/scan")
+async def scan_bus(
+    controller: RelayControllerDep,
+    start: int = Query(default=1, ge=1, le=255),
+    end: int = Query(default=10, ge=1, le=255),
+) -> dict:
+    """Scan serial bus for IOExpander boards by querying #b."""
+    if not controller.is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="IOExpander not connected",
+        )
+
+    found = []
+    for addr in range(start, end + 1):
+        controller._io._current_board = None
+        if controller._io._serial:
+            controller._io._serial.reset_input_buffer()
+        try:
+            resp = await controller._io.send_command_to_board(
+                addr, "#b"
+            )
+            if resp:
+                found.append({"address": addr, "hw_address": resp})
+        except Exception:
+            pass
+    return {"scanned": f"{start}-{end}", "found": found}
+
+
 @router.get("/diagnostics")
 async def board_diagnostics(controller: RelayControllerDep) -> dict:
     """Query each board for hardware info (#b, #v, #t)."""
