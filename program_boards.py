@@ -8,6 +8,7 @@ prompting you to swap boards between each step.
 
 import json
 import sys
+import termios
 import time
 
 import serial
@@ -31,12 +32,40 @@ def open_serial():
     if sys.platform == "linux":
         ser.write(bytes([0]))
         ser.flush()
+        time.sleep(0.1)
+        ser.reset_input_buffer()
     return ser
 
 
+def set_mark_parity(ser):
+    """MARK parity (9th bit = 1) for address byte."""
+    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(ser)
+    cflag |= termios.PARENB | CMSPAR | termios.PARODD
+    termios.tcsetattr(ser, termios.TCSANOW,
+                      [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+
+
+def set_space_parity(ser):
+    """SPACE parity (9th bit = 0) for data bytes."""
+    iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(ser)
+    cflag |= termios.PARENB | CMSPAR
+    cflag &= ~termios.PARODD
+    termios.tcsetattr(ser, termios.TCSANOW,
+                      [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+
+
+def address_board(ser, addr):
+    """Send address byte with MARK parity, then switch to SPACE."""
+    set_mark_parity(ser)
+    ser.write(bytes([addr]))
+    ser.flush()
+    set_space_parity(ser)
+
+
 def send_command(ser, command):
-    """Send command using broadcast (no addressing) and read response."""
+    """Address broadcast (0) then send command and read response."""
     ser.reset_input_buffer()
+    address_board(ser, 0)  # broadcast to any board
     ser.write((command + "\r").encode())
     ser.flush()
     ser.readline()  # discard echo
@@ -47,10 +76,11 @@ def send_command(ser, command):
 def set_address(ser, addr):
     """Program board address via #b<addr> command."""
     ser.reset_input_buffer()
+    address_board(ser, 0)
     ser.write((f"#b{addr}\r").encode())
     ser.flush()
     time.sleep(0.5)
-    # Verify
+    # Verify by reading back
     return send_command(ser, "#b")
 
 
