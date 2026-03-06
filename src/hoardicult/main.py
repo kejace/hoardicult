@@ -71,6 +71,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for config in board_configs:
             board_addr = config["board_addr"]
             count = config.get("relay_expander_count", 1)
+            if count == 0:
+                logger.info(f"Board {board_addr}: no RelayExpanders configured, skipping")
+                continue
             try:
                 await relay_controller.set_relay_expander_count(board_addr, count)
                 logger.info(
@@ -98,6 +101,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for config in board_configs:
             board_addr = config["board_addr"]
             relay_count = config.get("relay_count", 16)
+            if relay_count == 0:
+                continue
             try:
                 await relay_controller.close_all_on_board(board_addr, relay_count)
             except Exception as e:

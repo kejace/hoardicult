@@ -78,10 +78,10 @@ class BoardConfig(BaseModel):
     board_addr: int = Field(..., ge=1, le=255, description="IOExpander board address")
     name: str = Field(default="", description="Human-readable board name")
     relay_expander_count: int = Field(
-        default=1, ge=1, le=16, description="Number of RelayExpander boards"
+        default=1, ge=0, le=16, description="Number of RelayExpander boards"
     )
     relay_count: int = Field(
-        default=16, ge=1, le=256, description="Total relays on this board"
+        default=16, ge=0, le=256, description="Total relays on this board"
     )
 
 
@@ -134,7 +134,7 @@ class BoardHealthInfo(BaseModel):
 
     board_addr: int = Field(..., ge=1, le=255, description="IOExpander board address")
     name: str = Field(default="", description="Human-readable board name")
-    relay_count: int = Field(default=16, ge=1, le=256, description="Total relays")
+    relay_count: int = Field(default=16, ge=0, le=256, description="Total relays")
     relays: list[RelayStateInfo] = Field(
         default_factory=list, description="Relay states"
     )
