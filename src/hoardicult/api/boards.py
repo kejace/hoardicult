@@ -69,11 +69,18 @@ async def board_diagnostics(controller: RelayControllerDep) -> dict:
     results = []
     for config in _board_configs:
         board_addr = config["board_addr"]
-        info: dict = {"board_addr": board_addr, "name": config.get("name", "")}
+        info: dict = {
+            "board_addr": board_addr,
+            "name": config.get("name", ""),
+        }
+        # Force re-addressing by clearing cache
+        controller._io._current_board = None
         cmds = [("#b", "hw_address"), ("#v", "voltage"), ("#t", "temp")]
         for cmd, key in cmds:
             try:
-                resp = await controller._io.send_command_to_board(board_addr, cmd)
+                resp = await controller._io.send_command_to_board(
+                    board_addr, cmd
+                )
                 info[key] = resp
             except Exception as e:
                 info[key] = f"error: {e}"
